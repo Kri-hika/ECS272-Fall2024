@@ -143,9 +143,30 @@ const MedalDashboard: React.FC = () => {
   
     const path = d3.geoPath().projection(projection);
   
+    const COLORS = {
+        background: '#e2e8f0',  // Darker background gray
+        map: {
+          base: '#1a365d',      // Dark blue base for countries
+          noData: '#334155',    // Darker gray for countries without medals
+          gradient: {
+            start: '#3b82f6',   // Bright blue
+            middle: '#1d4ed8',  // Medium blue
+            end: '#1e3a8a'      // Dark blue
+          }
+        },
+        border: '#475569'       // Darker border color
+      };
+
     // Create color scale
-    const colorScale = d3.scaleSequential(d3.interpolateBlues)
-      .domain([0, d3.max(data, d => d.Total) || 0]);
+    const colorScale = d3.scaleSequential()
+    .domain([0, d3.max(data, d => d.Total) || 0])
+    .interpolator(t => d3.interpolate(
+      COLORS.map.gradient.start,
+      COLORS.map.gradient.end
+    )(t));
+
+    
+    
   
     // Draw map
     const g = svg.append('g')
@@ -176,54 +197,44 @@ const MedalDashboard: React.FC = () => {
             found: data.find(m => m.country === d.properties.NAME)?.country_code
           });
         }
-        return countryData ? colorScale(countryData.Total) : '#eee';
+        return countryData ? colorScale(countryData.Total) : '#f0f0f0';
     })
-    .attr('stroke', '#fff')
+    .attr('stroke', COLORS.border)
     .attr('stroke-width', 0.5)
     .on('mouseover', function(event, d) {
-      const iso3Code = d.properties.ISO_A3;
-      const countryData = data.find(m => 
-        m.country_code === iso3Code || countryCodeMap[m.country_code] === iso3Code
-      );
+      const countryData = data.find(m => m.country_code === d.properties.ISO_A3);
       
       d3.select(this)
         .attr('stroke-width', 1.5)
-        .attr('stroke', '#333');
-
-      if (countryData) {
-        tooltip.transition()
-          .duration(200)
-          .style('opacity', .9);
-        
-        tooltip.html(`
-          <strong>${countryData.country}</strong><br/>
-          Total Medals: ${countryData.Total}<br/>
-          Gold: ${countryData["Gold Medal"]}<br/>
-          Silver: ${countryData["Silver Medal"]}<br/>
-          Bronze: ${countryData["Bronze Medal"]}
-        `)
-          .style('left', (event.pageX + 10) + 'px')
-          .style('top', (event.pageY - 28) + 'px');
-      } else {
-        // Show country name even if no medal data
-        tooltip.transition()
-          .duration(200)
-          .style('opacity', .9);
-        
-        tooltip.html(`<strong>${d.properties.NAME}</strong><br/>No medals`)
-          .style('left', (event.pageX + 10) + 'px')
-          .style('top', (event.pageY - 28) + 'px');
-      }
-    })
-    .on('mouseout', function() {
-      d3.select(this)
-        .attr('stroke-width', 0.5)
         .attr('stroke', '#fff');
-      
-      tooltip.transition()
-        .duration(500)
-        .style('opacity', 0);
-    })
+
+        if (countryData) {
+            tooltip.transition()
+              .duration(200)
+              .style('opacity', .9);
+            
+            tooltip.html(`
+              <div style="background-color: ${COLORS.map.base}; color: white; padding: 8px; border-radius: 4px;">
+                <strong>${countryData.country}</strong><br/>
+                Total Medals: ${countryData.Total}<br/>
+                Gold: ${countryData["Gold Medal"]}<br/>
+                Silver: ${countryData["Silver Medal"]}<br/>
+                Bronze: ${countryData["Bronze Medal"]}
+              </div>
+            `)
+              .style('left', (event.pageX + 10) + 'px')
+              .style('top', (event.pageY - 28) + 'px');
+          }
+        })
+        .on('mouseout', function() {
+          d3.select(this)
+            .attr('stroke-width', 0.5)
+            .attr('stroke', COLORS.border);
+          
+          tooltip.transition()
+            .duration(500)
+            .style('opacity', 0);
+        })
     .on('click', (event, d) => {
       const iso3Code = d.properties.ISO_A3;
       const countryData = data.find(m => 
@@ -240,57 +251,61 @@ const MedalDashboard: React.FC = () => {
   }
   console.groupEnd();
 
-    // Add legend at the bottom
-    const legendWidth = Math.min(300, width - margin.left - margin.right);
-    const legendHeight = 15;
-    
-    const legendGroup = svg.append('g')
-      .attr('class', 'map-legend')
-      .attr('transform', `translate(${(width - legendWidth) / 2},${height - margin.bottom + 10})`);
+  const legendWidth = Math.min(300, width - margin.left - margin.right);
+  const legendHeight = 15;
   
-    // Create gradient definition
-    const gradient = legendGroup.append('defs')
-      .append('linearGradient')
-      .attr('id', 'medal-gradient')
-      .attr('x1', '0%')
-      .attr('x2', '100%');
-  
-    gradient.selectAll('stop')
-      .data(d3.range(0, 1.1, 0.1))
-      .join('stop')
-      .attr('offset', d => `${d * 100}%`)
-      .attr('stop-color', d => colorScale(d * d3.max(data, d => d.Total)!));
-  
-    // Draw gradient rectangle
-    legendGroup.append('rect')
-      .attr('width', legendWidth)
-      .attr('height', legendHeight)
-      .attr('fill', 'url(#medal-gradient)')
-      .attr('rx', 4);
-  
-    // Add legend scale
-    const legendScale = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d.Total)!])
-      .range([0, legendWidth]);
-  
-    const legendAxis = d3.axisBottom(legendScale)
+  const legendGroup = svg.append('g')
+    .attr('class', 'map-legend')
+    .attr('transform', `translate(${(width - legendWidth) / 2},${height - margin.bottom + 10})`);
+
+  // Create darker gradient for legend
+  const gradient = legendGroup.append('defs')
+    .append('linearGradient')
+    .attr('id', 'medal-gradient')
+    .attr('x1', '0%')
+    .attr('x2', '100%');
+
+  gradient.selectAll('stop')
+    .data([
+      { offset: '0%', color: COLORS.map.gradient.start },
+      { offset: '50%', color: COLORS.map.gradient.middle },
+      { offset: '100%', color: COLORS.map.gradient.end }
+    ])
+    .join('stop')
+    .attr('offset', d => d.offset)
+    .attr('stop-color', d => d.color);
+
+  // Draw legend rectangle
+  legendGroup.append('rect')
+    .attr('width', legendWidth)
+    .attr('height', legendHeight)
+    .attr('fill', 'url(#medal-gradient)')
+    .attr('rx', 4);
+
+  // Update legend text colors
+  legendGroup.append('text')
+    .attr('x', legendWidth / 2)
+    .attr('y', -5)
+    .attr('text-anchor', 'middle')
+    .attr('class', 'map-legend-title')
+    .style('fill', COLORS.map.base)
+    .style('font-weight', '600')
+    .text('Total Medals');
+
+  // Add legend scale with darker text
+  const legendScale = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.Total)!])
+    .range([0, legendWidth]);
+
+  const legendAxis = legendGroup.append('g')
+    .attr('transform', `translate(0,${legendHeight})`)
+    .call(d3.axisBottom(legendScale)
       .ticks(5)
-      .tickSize(5);
-  
-    legendGroup.append('g')
-      .attr('transform', `translate(0,${legendHeight})`)
-      .call(legendAxis)
-      .select('.domain')
-      .remove();
-  
-    // Add legend title
-    legendGroup.append('text')
-      .attr('x', legendWidth / 2)
-      .attr('y', -5)
-      .attr('text-anchor', 'middle')
-      .attr('class', 'map-legend-title')
-      .text('Total Medals');
-  };
+      .tickSize(5))
+    .style('color', COLORS.map.base);
+
+  legendAxis.select('.domain').remove();
+};
 
   const drawChordDiagram = (medals: DetailedMedal[]) => {
     if (!chordRef.current) return;
@@ -438,33 +453,24 @@ const MedalDashboard: React.FC = () => {
   };
   const updateMedalChart = (countryCode: string) => {
     if (!chartRef.current) return;
-
-    // Get the container dimensions
+  
     const chartContainer = chartRef.current.closest('.chart-container');
     if (!chartContainer) return;
-
+  
     const containerRect = chartContainer.getBoundingClientRect();
-    const width = containerRect.width - 40; // Account for container padding
-    const height = containerRect.height - 40;
-
-    // Set fixed margins for better control
-    const margin = {
-      top: 40,
-      right: 100, // Increased for legend
-      bottom: 80, // Increased for rotated labels
-      left: 50
-    };
-
+    const width = containerRect.width - 40;
+    const height = containerRect.height - 60;
+  
+    const margin = { top: 20, right: 80, bottom: 60, left: 50 };
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
-
-    // Get country data
+  
+    // Process data
     const countryMedals = detailedData.filter(d => d.country_code === countryCode);
     const sportsMedals = d3.group(countryMedals, d => d.discipline);
-
-    // Process data - limit to top 8 sports for better readability
+  
     const chartData = Array.from(sportsMedals, ([sport, medals]) => ({
-      sport: sport.length > 15 ? sport.substring(0, 12) + '...' : sport, // Truncate long names
+      sport: sport.length > 15 ? sport.substring(0, 12) + '...' : sport,
       "Gold Medal": medals.filter(m => m.medal_type === "Gold Medal").length,
       "Silver Medal": medals.filter(m => m.medal_type === "Silver Medal").length,
       "Bronze Medal": medals.filter(m => m.medal_type === "Bronze Medal").length
@@ -474,32 +480,30 @@ const MedalDashboard: React.FC = () => {
       (a["Gold Medal"] + a["Silver Medal"] + b["Bronze Medal"])
     )
     .slice(0, 8);
-
+  
     // Clear previous content
-    d3.select(chartRef.current).selectAll("*").remove();
-
+    d3.select(chartRef.current).selectAll('*').remove();
+  
     const svg = d3.select(chartRef.current)
       .attr('width', width)
-      .attr('height', height)
-      .attr('viewBox', `0 0 ${width} ${height}`);
-
+      .attr('height', height);
+  
     const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
-
-    // Create scales
+  
+    // Set up scales
     const xScale = d3.scaleBand()
       .domain(chartData.map(d => d.sport))
       .range([0, chartWidth])
       .padding(0.2);
-
+  
     const yScale = d3.scaleLinear()
       .domain([0, d3.max(chartData, d => 
         d["Gold Medal"] + d["Silver Medal"] + d["Bronze Medal"]
       ) || 0])
-      .range([chartHeight, 0])
-      .nice();
-
-    // Create and style axes
+      .range([chartHeight, 0]);
+  
+    // Add axes
     g.append('g')
       .attr('transform', `translate(0,${chartHeight})`)
       .call(d3.axisBottom(xScale))
@@ -507,63 +511,65 @@ const MedalDashboard: React.FC = () => {
       .attr('transform', 'rotate(-45)')
       .attr('dx', '-0.8em')
       .attr('dy', '0.5em')
-      .attr('text-anchor', 'end')
-      .style('font-size', '10px');
-
+      .attr('text-anchor', 'end');
+  
     g.append('g')
-      .call(d3.axisLeft(yScale))
-      .selectAll('text')
-      .style('font-size', '10px');
-
-    // Create stacked bars
+      .call(d3.axisLeft(yScale));
+  
+    // Create and animate stacked bars
     const stack = d3.stack()
       .keys(["Gold Medal", "Silver Medal", "Bronze Medal"]);
-
+  
     const colorScale = d3.scaleOrdinal()
       .domain(["Gold Medal", "Silver Medal", "Bronze Medal"])
       .range(['#FFD700', '#C0C0C0', '#CD7F32']);
-
-    g.append('g')
-      .selectAll('g')
+  
+    g.selectAll('g.medal-type')
       .data(stack(chartData))
       .join('g')
+      .attr('class', 'medal-type')
       .attr('fill', d => colorScale(d.key))
       .selectAll('rect')
       .data(d => d)
       .join('rect')
       .attr('x', d => xScale(d.data.sport)!)
+      .attr('y', chartHeight) // Start from bottom
+      .attr('height', 0) // Start with height 0
+      .attr('width', xScale.bandwidth())
+      .transition() // Add transition
+      .duration(1000) // 1 second duration
+      .delay((d, i) => i * 100) // Stagger the animations
       .attr('y', d => yScale(d[1]))
-      .attr('height', d => yScale(d[0]) - yScale(d[1]))
-      .attr('width', xScale.bandwidth());
-
-    // Add legend
+      .attr('height', d => yScale(d[0]) - yScale(d[1]));
+  
+    // Add legend with animation
     const legend = svg.append('g')
-      .attr('transform', `translate(${width - margin.right + 20},${margin.top})`);
-
+      .attr('transform', `translate(${width - margin.right + 10},${margin.top})`);
+  
     ["Gold Medal", "Silver Medal", "Bronze Medal"].forEach((medal, i) => {
       const legendRow = legend.append('g')
-        .attr('transform', `translate(0, ${i * 20})`);
-
+        .attr('transform', `translate(0,${i * 20})`);
+  
       legendRow.append('rect')
         .attr('width', 15)
         .attr('height', 15)
-        .attr('fill', colorScale(medal));
-
+        .attr('fill', colorScale(medal))
+        .style('opacity', 0)
+        .transition()
+        .duration(500)
+        .delay(i * 100)
+        .style('opacity', 1);
+  
       legendRow.append('text')
-        .attr('x', 20)
+        .attr('x', 24)
         .attr('y', 12)
-        .style('font-size', '10px')
-        .text(medal.replace(' Medal', ''));
+        .text(medal.replace(' Medal', ''))
+        .style('opacity', 0)
+        .transition()
+        .duration(500)
+        .delay(i * 100)
+        .style('opacity', 1);
     });
-
-    // Add title
-    svg.append('text')
-      .attr('x', width / 2)
-      .attr('y', 20)
-      .attr('text-anchor', 'middle')
-      .style('font-size', '12px')
-      .style('font-weight', 'bold')
-      .text('Medal Distribution by Sport');
   };
 
   const updateStatsPanel = (countryCode: string) => {
@@ -632,14 +638,20 @@ const MedalDashboard: React.FC = () => {
       <div className="dashboard-content">
         <div className="map-container">
           <svg ref={mapRef} />
+          <div className="map-legend">
+            <div className="map-legend-title">Total Medals</div>
+            <div className="map-legend-gradient"></div>
+            <div className="map-legend-labels"></div>
+          </div>
         </div>
         <div className="charts-sidebar">
           <div className="chart-container">
+            <h3>Medal Distribution by Sport</h3>
             <svg ref={chartRef} />
           </div>
           <div className="chart-container">
-          <h3 className="text-lg font-bold mb-2">Medal Distribution Network</h3>
-          <svg ref={chordRef} />
+            <h3>Medal Distribution Network</h3>
+            <svg ref={chordRef} />
           </div>
         </div>
       </div>
